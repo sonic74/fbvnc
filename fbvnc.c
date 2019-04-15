@@ -575,7 +575,7 @@ static int mainloop(int vnc_fd, int kbd_fd, int rat_fd)
 
 void show_usage(char *prog)
 {
-	printf("Usage : %s [options] server[:port]\n", prog);
+	printf("Usage : %s [options] [-- libvncserver options] server[:port]\n", prog);
 	printf("Valid options:\n");
 	printf("\t[-w save-passwd-file] write encrypted password to this file\n");
 	printf("\t[-p passwd-file] read encrypted password from this file\n");
@@ -613,7 +613,7 @@ int main(int argc, char * argv[])
 
 	while (1)
 	{
-		int ch = getopt(argc, argv, "b:p:w:hv");
+		int ch = getopt(argc, argv, "p:w:hv");
 		if (ch == -1) break;
 		switch (ch)
 		{
@@ -642,11 +642,11 @@ int main(int argc, char * argv[])
 
 	show_version(argv[0]);
 
-	host = argv[optind];
+	/*host = argv[optind];
 	if (argc > optind + 1)
 		port = argv[optind + 1];
 
-	/*if ((vnc_fd = vnc_connect(host, port)) < 0) {
+	if ((vnc_fd = vnc_connect(host, port)) < 0) {
 		fprintf(stderr, "could not connect! %s %s : %d\n",
 			host,port,vnc_fd);
 		return 1;
@@ -657,7 +657,6 @@ int main(int argc, char * argv[])
 		fprintf(stderr, "vnc init failed! %d\n", status);
 		return 2;
 	}
-
 	term_setup(&ti);
 	rat_fd = open("/dev/input/mice", O_RDONLY);
 
