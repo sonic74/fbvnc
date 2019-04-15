@@ -2,6 +2,7 @@
  * fbvnc - a small linux framebuffer vnc viewer
  *
  * Copyright (C) 2009-2012 Ali Gholami Rudi
+ * Copyright (C) 2019 Sven@Killig.de
  *
  * This program is released under the modified BSD license.
  */
@@ -28,6 +29,8 @@
 #include "vnc.h"
 #include "vncauth.h"
 
+#include <rfb/rfbclient.h>
+
 /* framebuffer depth */
 typedef unsigned short fbval_t;
 
@@ -38,7 +41,7 @@ typedef unsigned short fbval_t;
 #define MAX(a, b)	((a) > (b) ? (a) : (b))
 
 #define VNC_PORT		"5900"
-#define FBVNC_VERSION	"1.0.2"
+#define FBVNC_VERSION	"2"
 
 #define MAXRES			(1 << 12)
 
@@ -75,6 +78,36 @@ static int vnc_connect(char *addr, char *port)
 	freeaddrinfo(addrinfo);
 	return fd;
 }
+
+
+static char * get_password (rfbClient *client)
+{
+		char *passwd = NULL;
+		size_t len = 0;
+		ssize_t nread;
+
+		if (passwd_file) {
+			passwd = vncDecryptPasswdFromFile(passwd_file);
+		} else {
+printf("Password: ");
+			nread = getline(&passwd, &len, stdin);
+			passwd[nread-1] = '\0';
+			if (strlen(passwd) == 0) {
+				fprintf(stderr, "Reading password failed\n");
+				return NULL;
+			}
+			if (strlen(passwd) > MAXPWLEN) {
+				passwd[MAXPWLEN] = '\0';
+			}
+		}
+printf("Password: '%s'\n", passwd);
+
+			if (passwd_save) {
+				vncEncryptAndStorePasswd(passwd, passwd_save);
+			}
+		return passwd;
+}
+
 
 static int bpp, vnc_mode;
 static struct rgb_conv format;
@@ -134,18 +167,7 @@ static int vnc_init(int fd)
 		if (read(fd, challenge, sizeof(challenge)) != sizeof(challenge))
 			return -2;
 
-		if (passwd_file) {
-			passwd = vncDecryptPasswdFromFile(passwd_file);
-		} else {
-			passwd = getpass("Password: ");
-			if (strlen(passwd) == 0) {
-				fprintf(stderr, "Reading password failed\n");
-				return -3;
-			}
-			if (strlen(passwd) > MAXPWLEN) {
-				passwd[MAXPWLEN] = '\0';
-			}
-		}
+		passwd=get_password(NULL);
 
 		vncEncryptBytes(challenge, passwd);
 
@@ -160,9 +182,9 @@ static int vnc_init(int fd)
 		{
 		case VNC_AUTH_OK:
 			printf("VNC authentication succeeded\n");
-			if (passwd_save) {
+/*			if (passwd_save) {
 				vncEncryptAndStorePasswd(passwd, passwd_save);
-			}
+			}*/
 			break;
 		case VNC_AUTH_FAILED:
 			fprintf(stderr, "VNC authentication failed\n");
@@ -304,6 +326,7 @@ static int vnc_event(int fd)
 			y = ntohs(uprect.y);
 			w = ntohs(uprect.w);
 			h = ntohs(uprect.h);
+printf("VNC_SERVER_FBUP  x=%i  y=%i  w=%i  h=%i\r\n", x, y, w, h);
 			x -= oc;
 			y -= or;
 			i = 0;
@@ -329,9 +352,11 @@ static int vnc_event(int fd)
 				}
 				skip(fd, (w - l - i) * bpp);
 			}
+			mxc_epdc_fb_send_update(NULL, ntohs(uprect.x), ntohs(uprect.y), ntohs(uprect.w), ntohs(uprect.h));
 		}
 		break;
 	case VNC_SERVER_BELL:
+printf("VNC_SERVER_BELL\r\n");
 		break;
 	case VNC_SERVER_CUTTEXT:
 		xread(fd, &msg.cuttext.pad1, sizeof(msg.cuttext) - 1);
@@ -494,8 +519,8 @@ static void term_setup(struct termios *ti)
 {
 	struct termios termios;
 
-	dprintf(STDOUT_FILENO, "\033[2J");	// clear screen
-	dprintf(STDOUT_FILENO, "\033[?25l");	// hide cursor
+	printf("\033[2J");	// clear screen
+	printf("\033[?25l");	// hide cursor
 	showmsg();
 	tcgetattr(0, &termios);
 	*ti = termios;
@@ -506,8 +531,8 @@ static void term_setup(struct termios *ti)
 static void term_cleanup(struct termios *ti)
 {
 	tcsetattr(0, TCSANOW, ti);
-	dprintf(STDOUT_FILENO, "\033[2J");	// clear screen
-	dprintf(STDOUT_FILENO, "\033[?25h");	// show cursor
+	printf("\033[2J");	// clear screen
+	printf("\033[?25h");	// show cursor
 }
 
 static int mainloop(int vnc_fd, int kbd_fd, int rat_fd)
@@ -550,18 +575,33 @@ static int mainloop(int vnc_fd, int kbd_fd, int rat_fd)
 
 void show_usage(char *prog)
 {
-	printf("Usage : %s [options] server [port]\n", prog);
+	printf("Usage : %s [options] server[:port]\n", prog);
 	printf("Valid options:\n");
-	printf("\t[-b bpp-bits] specify bits per pixel\n");
-	printf("\t[-p passwd-file] read encrypted password from this file\n");
 	printf("\t[-w save-passwd-file] write encrypted password to this file\n");
+	printf("\t[-p passwd-file] read encrypted password from this file\n");
 	printf("\t[-h] show this help message\n");
 	printf("\t[-v] show version information\n");
+	printf("libvncserver options:\n");
+	printf("\t[-listen]\n");
+	printf("\t[-listennofork]\n");
+	printf("\t[-play]\n");
+	printf("\t[-encodings]\n");
+	printf("\t[-compress]\n");
+	printf("\t[-quality]\n");
+	printf("\t[-scale]\n");
+	printf("\t[-qosdscp]\n");
+	printf("\t[-repeaterdest]\n");
 }
 
 void show_version(char *prog)
 {
-	printf("%s "FBVNC_VERSION" - Uranus Zhou\n\n", prog);
+	printf("%s "FBVNC_VERSION" - Uranus Zhou, Sven@Killig.de\n\n", prog);
+}
+
+static void cleanup(rfbClient* cl)
+{
+  if(cl)
+    rfbClientCleanup(cl);
 }
 
 int main(int argc, char * argv[])
@@ -606,7 +646,7 @@ int main(int argc, char * argv[])
 	if (argc > optind + 1)
 		port = argv[optind + 1];
 
-	if ((vnc_fd = vnc_connect(host, port)) < 0) {
+	/*if ((vnc_fd = vnc_connect(host, port)) < 0) {
 		fprintf(stderr, "could not connect! %s %s : %d\n",
 			host,port,vnc_fd);
 		return 1;
@@ -617,6 +657,7 @@ int main(int argc, char * argv[])
 		fprintf(stderr, "vnc init failed! %d\n", status);
 		return 2;
 	}
+
 	term_setup(&ti);
 	rat_fd = open("/dev/input/mice", O_RDONLY);
 
@@ -625,6 +666,54 @@ int main(int argc, char * argv[])
 	term_cleanup(&ti);
 	vnc_free();
 	close(vnc_fd);
-	close(rat_fd);
+	close(rat_fd);*/
+
+	// switched to libvncserver for better encodings
+	// ToDo: input
+	static int listenLoop;
+	rfbClient* cl;
+	int i;
+
+	do {
+	cl=rfbGetClient(5,3,2);
+	cl->MallocFrameBuffer=resize;
+	cl->canHandleNewFBSize = FALSE;
+	cl->GotFrameBufferUpdate=mxc_epdc_fb_send_update;
+	cl->GetPassword = get_password;
+	cl->Bell = mxc_epdc_fb_full_refresh;
+	if(!rfbInitClient(cl,&argc,argv))
+             {
+               cl = NULL; /* rfbInitClient has already freed the client struct */
+               cleanup(cl);
+               break;
+             }
+
+	  while(1) {
+//	    if(SDL_PollEvent(&e)) {
+	      /*
+		handleSDLEvent() return 0 if user requested window close.
+		In this case, handleSDLEvent() will have called cleanup().
+	      */
+/**	      if(!handleSDLEvent(cl, &e))
+		break;
+	    }
+	    else {*/
+	      i=WaitForMessage(cl,/*500*/2147483647);
+	      if(i<0)
+		{
+		  cleanup(cl);
+		  break;
+		}
+	      if(i)
+		if(!HandleRFBServerMessage(cl))
+		  {
+		    cleanup(cl);
+		    break;
+		  }
+//	    }
+	  }
+	}
+	while(listenLoop);
+
 	return 2 - status;
 }

@@ -8,9 +8,17 @@
 #include <string.h>
 #include "draw.h"
 
+#include <linux/mxcfb.h>
+
 #define MIN(a, b)	((a) < (b) ? (a) : (b))
 #define MAX(a, b)	((a) > (b) ? (a) : (b))
 #define NLEVELS		(1 << 16)
+
+
+#define LOGI(...)  printf(__VA_ARGS__)
+//#define LOGI(...)
+static __u32 marker_val = 1;
+
 
 static int fd;
 static void *fb;
@@ -90,17 +98,23 @@ unsigned fb_mode(void)
 int fb_init(void)
 {
 	int err = 1;
+printf("FBDEV_PATH=%s\n", FBDEV_PATH);
 	fd = open(FBDEV_PATH, O_RDWR);
 	if (fd == -1)
 		goto failed;
 	err++;
 	if (ioctl(fd, FBIOGET_VSCREENINFO, &vinfo) == -1)
 		goto failed;
+printf("vinfo.xres=%i  yres=%i  bits_per_pixel=%i  red.offset=%i  green.offset=%i  blue.offset=%i  red.length=%i  green.length=%i  blue.length=%i  rotate=%i\n", vinfo.xres, vinfo.yres, vinfo.bits_per_pixel, vinfo.red.offset, vinfo.green.offset, vinfo.blue.offset, vinfo.red.length, vinfo.green.length, vinfo.blue.length, vinfo.rotate);
+	vinfo.rotate=FB_ROTATE_UD;
+	if (ioctl(fd, FBIOPUT_VSCREENINFO, &vinfo) == -1)
+		goto failed;
 	err++;
 	if (ioctl(fd, FBIOGET_FSCREENINFO, &finfo) == -1)
 		goto failed;
 	fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
 	bytes_per_pixel = (vinfo.bits_per_pixel + 7) >> 3;
+printf("finfo.line_length/%i=%i\n", bytes_per_pixel, finfo.line_length/bytes_per_pixel);
 	fb = mmap(NULL, fb_len(), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	err++;
 	if (fb == MAP_FAILED)
@@ -112,6 +126,30 @@ failed:
 	perror("fb_init()");
 	close(fd);
 	return err;
+}
+
+/*static*/ rfbBool resize(rfbClient* client) {
+printf("resize()\n\r");
+	int i;
+	i = fb_init();
+	if (i) {
+		return FALSE;
+	} else {
+	client->width = finfo.line_length / bytes_per_pixel;
+
+	client->height = vinfo.yres;
+
+	client->frameBuffer=fb;
+
+	client->format.bitsPerPixel=vinfo.bits_per_pixel;
+	client->format.redShift=vinfo.red.offset;
+	client->format.greenShift=vinfo.green.offset;
+	client->format.blueShift=vinfo.blue.offset;
+	client->format.redMax=(1<<vinfo.red.length)-1;
+	client->format.greenMax=(1<<vinfo.green.length)-1;
+	client->format.blueMax=(1<<vinfo.blue.length)-1;
+		return TRUE;
+	}
 }
 
 void fb_free(void)
@@ -135,6 +173,63 @@ void *fb_mem(int r)
 {
 	return fb + (r + vinfo.yoffset) * finfo.line_length;
 }
+
+
+void update (__u32 left, __u32 top, __u32 width, __u32 height, __u32 waveform_mode, __u32 update_mode, unsigned int flags, int wait_for_complete) {
+
+	int retval;
+	struct mxcfb_update_data upd_data;
+    memset(&upd_data, 0, sizeof(struct mxcfb_update_data));
+
+	LOGI("update(%d,%d,%d,%d,%d,%d,%d,%d)  ", left, top, width, height, waveform_mode, update_mode, flags, wait_for_complete);
+
+	upd_data.update_region.left = left;
+	upd_data.update_region.top = top;
+	if(left+width>vinfo.xres) width=vinfo.xres-left;
+	upd_data.update_region.width = width;
+	upd_data.update_region.height = height;
+
+    upd_data.waveform_mode = waveform_mode;
+
+    upd_data.update_mode = update_mode;
+
+    upd_data.flags |= flags;
+
+	upd_data.temp = TEMP_USE_AMBIENT;
+
+	if (wait_for_complete) {
+		upd_data.update_marker = marker_val++;
+	} else {
+		upd_data.update_marker = 0;
+	}
+	LOGI(">>MXCFB_SEND_UPDATE<< offset=%d  ", vinfo.yoffset);
+	retval = ioctl(fd, MXCFB_SEND_UPDATE, &upd_data);
+	if (retval < 0) {
+//		usleep(300000);
+//		retval = ioctl(fd, MXCFB_SEND_UPDATE, &upd_data);
+        LOGI("retval = 0x%x try again maybe  ", retval);
+	}
+
+	if (wait_for_complete) {
+		LOGI(">>MXCFB_WAIT_FOR_UPDATE_COMPLETE<<  ");
+		retval = ioctl(fd, MXCFB_WAIT_FOR_UPDATE_COMPLETE, &upd_data.update_marker);
+		if (retval < 0) {
+			LOGI("failed. Error=0x%x ", retval);
+		}
+		LOGI("Done  ");
+	}
+
+	LOGI("\r\n");
+}
+
+/*static*/ void mxc_epdc_fb_send_update(rfbClient* cl, int x, int y, int w, int h) {
+	update(x, y, w, h, WAVEFORM_MODE_A2, UPDATE_MODE_PARTIAL, EPDC_FLAG_FORCE_MONOCHROME, 0);
+}
+
+void mxc_epdc_fb_full_refresh(rfbClient* cl) {
+	update(0, 0, vinfo.xres, vinfo.yres, WAVEFORM_MODE_GC16, UPDATE_MODE_FULL, 0, 1);
+}
+
 
 void fb_set(int r, int c, void *mem, int len)
 {

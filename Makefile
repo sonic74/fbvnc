@@ -1,6 +1,6 @@
 CC = cc
 CFLAGS = -Wall -Os
-LDFLAGS =
+LDFLAGS = -lvncserver
 
 all: fbvnc
 .c.o:
