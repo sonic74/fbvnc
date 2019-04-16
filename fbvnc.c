@@ -352,7 +352,8 @@ printf("VNC_SERVER_FBUP  x=%i  y=%i  w=%i  h=%i\r\n", x, y, w, h);
 				}
 				skip(fd, (w - l - i) * bpp);
 			}
-			mxc_epdc_fb_send_update(NULL, ntohs(uprect.x), ntohs(uprect.y), ntohs(uprect.w), ntohs(uprect.h));
+			GotFrameBufferUpdate(NULL, ntohs(uprect.x), ntohs(uprect.y), ntohs(uprect.w), ntohs(uprect.h));
+			FinishedFrameBufferUpdate(NULL);
 		}
 		break;
 	case VNC_SERVER_BELL:
@@ -585,9 +586,9 @@ void show_usage(char *prog)
 	printf("\t[-listen]\n");
 	printf("\t[-listennofork]\n");
 	printf("\t[-play]\n");
-	printf("\t[-encodings]\n");
-	printf("\t[-compress]\n");
-	printf("\t[-quality]\n");
+	printf("\t[-encodings] raw copyrect tight hextile zlib zlibhex zrle zywrle ultra ultrazip corre rre\n");
+	printf("\t[-compress] 0..9\n");
+	printf("\t[-quality] 0..9\n");
 	printf("\t[-scale]\n");
 	printf("\t[-qosdscp]\n");
 	printf("\t[-repeaterdest]\n");
@@ -677,7 +678,8 @@ int main(int argc, char * argv[])
 	cl=rfbGetClient(5,3,2);
 	cl->MallocFrameBuffer=resize;
 	cl->canHandleNewFBSize = FALSE;
-	cl->GotFrameBufferUpdate=mxc_epdc_fb_send_update;
+	cl->GotFrameBufferUpdate=GotFrameBufferUpdate;
+	cl->FinishedFrameBufferUpdate=FinishedFrameBufferUpdate;
 	cl->GetPassword = get_password;
 	cl->Bell = mxc_epdc_fb_full_refresh;
 	if(!rfbInitClient(cl,&argc,argv))
@@ -697,7 +699,7 @@ int main(int argc, char * argv[])
 		break;
 	    }
 	    else {*/
-	      i=WaitForMessage(cl,/*500*/2147483647);
+	      i=WaitForMessage(cl,/*500*/INT_MAX);
 	      if(i<0)
 		{
 		  cleanup(cl);

@@ -27,6 +27,7 @@ void fb_set(int r, int c, void *mem, int len);
 unsigned fb_val(int r, int g, int b);
 
 
-/*static*/ void mxc_epdc_fb_send_update(rfbClient* cl, int x, int y, int w, int h);
+/*static*/ void GotFrameBufferUpdate(rfbClient* cl, int x, int y, int w, int h);
 /*static*/ rfbBool resize(rfbClient* client);
 void mxc_epdc_fb_full_refresh(rfbClient* client);
+void FinishedFrameBufferUpdate(rfbClient* cl);

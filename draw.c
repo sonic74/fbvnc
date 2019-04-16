@@ -222,8 +222,24 @@ void update (__u32 left, __u32 top, __u32 width, __u32 height, __u32 waveform_mo
 	LOGI("\r\n");
 }
 
-/*static*/ void mxc_epdc_fb_send_update(rfbClient* cl, int x, int y, int w, int h) {
-	update(x, y, w, h, WAVEFORM_MODE_A2, UPDATE_MODE_PARTIAL, EPDC_FLAG_FORCE_MONOCHROME, 0);
+static int x_=INT_MAX, y_=INT_MAX, x2_, y2_;
+/*static*/ void GotFrameBufferUpdate(rfbClient* cl, int x, int y, int w, int h) {
+//	update(x, y, w, h, WAVEFORM_MODE_A2, UPDATE_MODE_PARTIAL, EPDC_FLAG_FORCE_MONOCHROME, 0);
+	int x2, y2;
+	x2=x+w;
+	y2=y+h;
+	x_=MIN(x_, x);
+	y_=MIN(y_, y);
+	x2_=MAX(x2_, x2);
+	y2_=MAX(y2_, y2);
+}
+
+void FinishedFrameBufferUpdate(rfbClient* cl) {
+	update(x_, y_, x2_-x_, y2_-y_, WAVEFORM_MODE_A2, UPDATE_MODE_PARTIAL, EPDC_FLAG_FORCE_MONOCHROME, 0);
+	x_=vinfo.xres;
+	y_=vinfo.yres;
+	x2_=0;
+	y2_=0;
 }
 
 void mxc_epdc_fb_full_refresh(rfbClient* cl) {
