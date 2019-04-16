@@ -28,6 +28,7 @@ unsigned fb_val(int r, int g, int b);
 
 
 /*static*/ void GotFrameBufferUpdate(rfbClient* cl, int x, int y, int w, int h);
-/*static*/ rfbBool resize(rfbClient* client);
+/*static*/ rfbBool MallocFrameBuffer(rfbClient* client);
 void mxc_epdc_fb_full_refresh(rfbClient* client);
 void FinishedFrameBufferUpdate(rfbClient* cl);
+void setRotate(int rotate);

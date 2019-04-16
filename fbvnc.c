@@ -578,6 +578,7 @@ void show_usage(char *prog)
 {
 	printf("Usage : %s [options] [-- libvncserver options] server[:port]\n", prog);
 	printf("Valid options:\n");
+	printf("\t[-r rotation] UR=0 CW=1 UD=2 CCW=3\n");
 	printf("\t[-w save-passwd-file] write encrypted password to this file\n");
 	printf("\t[-p passwd-file] read encrypted password from this file\n");
 	printf("\t[-h] show this help message\n");
@@ -614,12 +615,12 @@ int main(int argc, char * argv[])
 
 	while (1)
 	{
-		int ch = getopt(argc, argv, "p:w:hv");
+		int ch = getopt(argc, argv, "r:p:w:hv");
 		if (ch == -1) break;
 		switch (ch)
 		{
-		case 'b':
-  			bpp = atoi(optarg) >> 3;
+		case 'r':
+			setRotate(atoi(optarg));
 			break;
 		case 'p':
 			passwd_file = optarg;
@@ -676,7 +677,7 @@ int main(int argc, char * argv[])
 
 	do {
 	cl=rfbGetClient(5,3,2);
-	cl->MallocFrameBuffer=resize;
+	cl->MallocFrameBuffer=MallocFrameBuffer;
 	cl->canHandleNewFBSize = FALSE;
 	cl->GotFrameBufferUpdate=GotFrameBufferUpdate;
 	cl->FinishedFrameBufferUpdate=FinishedFrameBufferUpdate;

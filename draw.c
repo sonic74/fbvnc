@@ -95,6 +95,11 @@ unsigned fb_mode(void)
 		(vinfo.green.length << 4) | (vinfo.blue.length);
 }
 
+static int rotate_=-1;
+void setRotate(int rotate) {
+	rotate_=rotate;
+}
+
 int fb_init(void)
 {
 	int err = 1;
@@ -106,9 +111,11 @@ printf("FBDEV_PATH=%s\n", FBDEV_PATH);
 	if (ioctl(fd, FBIOGET_VSCREENINFO, &vinfo) == -1)
 		goto failed;
 printf("vinfo.xres=%i  yres=%i  bits_per_pixel=%i  red.offset=%i  green.offset=%i  blue.offset=%i  red.length=%i  green.length=%i  blue.length=%i  rotate=%i\n", vinfo.xres, vinfo.yres, vinfo.bits_per_pixel, vinfo.red.offset, vinfo.green.offset, vinfo.blue.offset, vinfo.red.length, vinfo.green.length, vinfo.blue.length, vinfo.rotate);
-	vinfo.rotate=FB_ROTATE_UD;
-	if (ioctl(fd, FBIOPUT_VSCREENINFO, &vinfo) == -1)
-		goto failed;
+	if(rotate_!=-1) {
+		vinfo.rotate=rotate_;
+		if (ioctl(fd, FBIOPUT_VSCREENINFO, &vinfo) == -1)
+			goto failed;
+	}
 	err++;
 	if (ioctl(fd, FBIOGET_FSCREENINFO, &finfo) == -1)
 		goto failed;
@@ -128,8 +135,8 @@ failed:
 	return err;
 }
 
-/*static*/ rfbBool resize(rfbClient* client) {
-printf("resize()\n\r");
+/*static*/ rfbBool MallocFrameBuffer(rfbClient* client) {
+printf("MallocFrameBuffer()\n\r");
 	int i;
 	i = fb_init();
 	if (i) {
@@ -224,7 +231,6 @@ void update (__u32 left, __u32 top, __u32 width, __u32 height, __u32 waveform_mo
 
 static int x_=INT_MAX, y_=INT_MAX, x2_, y2_;
 /*static*/ void GotFrameBufferUpdate(rfbClient* cl, int x, int y, int w, int h) {
-//	update(x, y, w, h, WAVEFORM_MODE_A2, UPDATE_MODE_PARTIAL, EPDC_FLAG_FORCE_MONOCHROME, 0);
 	int x2, y2;
 	x2=x+w;
 	y2=y+h;
